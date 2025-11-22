@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Umaly - AI-Powered Agricultural Supply Chain for Mindanao</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            overflow-x: hidden;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1.5rem 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: #0f172a;
+        }
+
+        .logo-icon {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2.5rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #475569;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: #10b981;
+        }
+
+        .cta-btn {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 0.75rem 2rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.95rem;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+            transition: all 0.3s;
+            border: none;
+            cursor: pointer;
+        }
+
+        .cta-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+        }
+
+        /* Hero Section */
+        .hero {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            padding: 10rem 5% 6rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 50%;
+            height: 100%;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600"><rect fill="%2310b981" opacity="0.05" width="1200" height="600"/><circle cx="900" cy="100" r="200" fill="%2310b981" opacity="0.03"/><circle cx="1100" cy="400" r="150" fill="%2359f1c0" opacity="0.03"/></svg>');
+            background-size: cover;
+        }
+
+        .hero-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-text h1 {
+            font-size: 3.5rem;
+            font-weight: 900;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(135deg, #ffffff 0%, #10b981 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-text .tagline {
+            font-size: 1.35rem;
+            color: #cbd5e1;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .hero-stats {
+            display: flex;
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #10b981;
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .hero-visual {
+            position: relative;
+        }
+
+        .hero-image {
+            width: 100%;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        /* Features Section */
+        .features {
+            padding: 6rem 5%;
+            background: #f8fafc;
+        }
+
+        .section-header {
+            text-align: center;
+            max-width: 700px;
+            margin: 0 auto 4rem;
+        }
+
+        .section-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 0.5rem 1.5rem;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 1rem;
+        }
+
+        .section-header h2 {
+            font-size: 2.75rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            color: #0f172a;
+        }
+
+        .section-header p {
+            font-size: 1.15rem;
+            color: #64748b;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2.5rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            transition: all 0.3s;
+            border: 1px solid #e2e8f0;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.12);
+        }
+
+        .feature-icon {
+            width: 70px;
+            height: 70px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-icon.emerald {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+        }
+
+        .feature-icon.blue {
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        }
+
+        .feature-icon.purple {
+            background: linear-gradient(135deg, #e9d5ff 0%, #d8b4fe 100%);
+        }
+
+        .feature-icon.amber {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        }
+
+        .feature-icon.rose {
+            background: linear-gradient(135deg, #fecdd3 0%, #fda4af 100%);
+        }
+
+        .feature-icon.indigo {
+            background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+        }
+
+        .feature-card h3 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            color: #0f172a;
+        }
+
+        .feature-card p {
+            color: #64748b;
+            line-height: 1.7;
+        }
+
+        /* AI Agents Section */
+        .ai-agents {
+            padding: 6rem 5%;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: white;
+        }
+
+        .agents-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2.5rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .agent-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            padding: 2.5rem;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+        }
+
+        .agent-card:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-5px);
+        }
+
+        .agent-emoji {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        .agent-card h3 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: #10b981;
+        }
+
+        .agent-role {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 1rem;
+        }
+
+        .agent-card p {
+            color: #cbd5e1;
+            line-height: 1.7;
+            margin-bottom: 1.5rem;
+        }
+
+        .agent-features {
+            list-style: none;
+            padding: 0;
+        }
+
+        .agent-features li {
+            padding: 0.5rem 0;
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+
+        .agent-features li::before {
+            content: '✓';
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+
+        /* How It Works Section */
+        .how-it-works {
+            padding: 6rem 5%;
+            background: white;
+        }
+
+        .timeline {
+            max-width: 1000px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+        }
+
+        .timeline-item {
+            display: flex;
+            margin-bottom: 4rem;
+            position: relative;
+        }
+
+        .timeline-item:nth-child(odd) {
+            flex-direction: row-reverse;
+        }
+
+        .timeline-content {
+            width: 45%;
+            background: white;
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 2px solid #e2e8f0;
+        }
+
+        .timeline-number {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 800;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+        }
+
+        .timeline-content h3 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            color: #0f172a;
+        }
+
+        .timeline-content p {
+            color: #64748b;
+            line-height: 1.7;
+        }
+
+        /* CTA Section */
+        .cta-section {
+            padding: 6rem 5%;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            text-align: center;
+            color: white;
+        }
+
+        .cta-section h2 {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+        }
+
+        .cta-section p {
+            font-size: 1.25rem;
+            margin-bottom: 2.5rem;
+            opacity: 0.9;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+        }
+
+        .btn-primary {
+            background: white;
+            color: #10b981;
+            padding: 1rem 2.5rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1.1rem;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            padding: 1rem 2.5rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1.1rem;
+            border: 2px solid white;
+            transition: all 0.3s;
+        }
+
+        .btn-secondary:hover {
+            background: white;
+            color: #10b981;
+        }
+
+        /* Footer */
+        footer {
+            background: #0f172a;
+            color: #94a3b8;
+            padding: 4rem 5% 2rem;
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 3rem;
+            margin-bottom: 3rem;
+        }
+
+        .footer-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 1rem;
+        }
+
+        .footer-desc {
+            color: #64748b;
+            line-height: 1.7;
+            margin-bottom: 1.5rem;
+        }
+
+        .footer-section h4 {
+            color: white;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .footer-links {
+            list-style: none;
+        }
+
+        .footer-links li {
+            margin-bottom: 0.75rem;
+        }
+
+        .footer-links a {
+            color: #64748b;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: #10b981;
+        }
+
+        .footer-bottom {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            color: #64748b;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 968px) {
+            .nav-links {
+                display: none;
+            }
+
+            .hero-content {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+
+            .hero-text h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero-stats {
+                justify-content: center;
+            }
+
+            .features-grid,
+            .agents-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .timeline::before {
+                left: 30px;
+            }
+
+            .timeline-item {
+                flex-direction: row !important;
+                padding-left: 80px;
+            }
+
+            .timeline-content {
+                width: 100%;
+            }
+
+            .timeline-number {
+                left: 30px;
+            }
+
+            .footer-content {
+                grid-template-columns: 1fr;
+            }
+
+            .cta-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="logo">
+            <div class="logo-icon">🌾</div>
+            <span>Umaly</span>
+        </div>
+        <ul class="nav-links">
+            <li><a href="#features">Features</a></li>
+            <li><a href="#agents">AI Agents</a></li>
+            <li><a href="#how-it-works">How It Works</a></li>
+            <li><a href="#contact">Contact</a></li>
+        </ul>
+        <button class="cta-btn">Get Started</button>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-text">
+                <h1>Transform Agricultural Supply Chains with AI</h1>
+                <p class="tagline">Empowering Mindanao's farmers and SMEs with intelligent forecasting, real-time coordination, and transparent procurement.</p>
+                <button class="cta-btn" style="font-size: 1.1rem; padding: 1rem 2.5rem;">Start Free Trial</button>
+                <div class="hero-stats">
+                    <div class="stat-item">
+                        <span class="stat-number">500+</span>
+                        <span class="stat-label">Active Farmers</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">98%</span>
+                        <span class="stat-label">Accuracy Rate</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">2.5M kg</span>
+                        <span class="stat-label">Processed</span>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600'%3E%3Crect fill='%230f172a' width='800' height='600'/%3E%3Crect fill='%2310b981' opacity='0.1' x='50' y='50' width='700' height='500' rx='20'/%3E%3Ctext x='400' y='300' font-family='Arial' font-size='48' fill='%2310b981' text-anchor='middle'%3E🌾 Umaly Platform%3C/text%3E%3C/svg%3E" alt="Umaly Platform" class="hero-image">
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <div class="section-header">
+            <span class="section-badge">Platform Features</span>
+            <h2>Everything You Need for Smart Agriculture</h2>
+            <p>Umaly brings cutting-edge AI technology to agricultural supply chain management in Mindanao.</p>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon emerald">🧠</div>
+                <h3>AI Demand Planning</h3>
+                <p>Autonomous inventory analysis that predicts stockouts, calculates days of inventory, and recommends optimal purchase orders.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon blue">📱</div>
+                <h3>Farmer Coordination</h3>
+                <p>SMS-based AI agents reach farmers in their local language (Taglish-Bisaya), coordinating harvests based on demand and weather.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon purple">⚖️</div>
+                <h3>Variance Detection</h3>
+                <p>Intelligent fraud detection comparing dispatched vs received weights, flagging suspicious discrepancies automatically.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon amber">📊</div>
+                <h3>Real-Time Dashboard</h3>
+                <p>Live visibility into inventory levels, incoming forecasts, and available-to-promise quantities across all stations.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon rose">🎯</div>
+                <h3>Smart Commitments</h3>
+                <p>Station operators propose realistic commitments based on physical stock and AI-powered farmer forecasts.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon indigo">📈</div>
+                <h3>Quality Grading</h3>
+                <p>AI-powered visual analysis instantly grades crop quality, detecting defects and ensuring premium standards.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- AI Agents Section -->
+    <section class="ai-agents" id="agents">
+        <div class="section-header" style="color: white;">
+            <span class="section-badge">AI Technology</span>
+            <h2 style="color: white;">Meet Your AI-Powered Team</h2>
+            <p style="color: #cbd5e1;">Three specialized agents working 24/7 to optimize your supply chain</p>
+        </div>
+        <div class="agents-grid">
+            <div class="agent-card">
+                <span class="agent-emoji">🕵️‍♂️</span>
+                <h3>The Harvest Scout</h3>
+                <p class="agent-role">Farmer Activation Agent</p>
+                <p>Reaches out to farmers in Taglish-Bisaya, warning about bad weather, communicating high demand, and collecting harvest forecasts via SMS.</p>
+                <ul class="agent-features">
+                    <li>Weather-aware messaging</li>
+                    <li>Demand signal amplification</li>
+                    <li>Local language support</li>
+                    <li>Automated follow-ups</li>
+                </ul>
+            </div>
+            <div class="agent-card">
+                <span class="agent-emoji">🧠</span>
+                <h3>The Demand Planner</h3>
+                <p class="agent-role">Supply Chain Analyst</p>
+                <p>Monitors inventory levels, calculates burn rates, predicts stockouts, and recommends purchase orders to prevent disruptions.</p>
+                <ul class="agent-features">
+                    <li>Real-time DOI calculation</li>
+                    <li>Stockout prediction</li>
+                    <li>Seasonal analysis</li>
+                    <li>Auto PO recommendations</li>
+                </ul>
+            </div>
+            <div class="agent-card">
+                <span class="agent-emoji">⚖️</span>
+                <h3>The Variance Auditor</h3>
+                <p class="agent-role">Quality & Security Agent</p>
+                <p>Analyzes weight discrepancies between dispatch and receipt, accounting for natural moisture loss and flagging suspicious variances.</p>
+                <ul class="agent-features">
+                    <li>Fraud detection</li>
+                    <li>Moisture loss modeling</li>
+                    <li>Automatic flagging</li>
+                    <li>Transit analysis</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="how-it-works" id="how-it-works">
+        <div class="section-header">
+            <span class="section-badge">Process</span>
+            <h2>How Umaly Works</h2>
+            <p>From farmer to factory in five intelligent steps</p>
+        </div>
+        <div class="timeline">
+            <div class="timeline-item">
+                <div class="timeline-content">
+                    <h3>AI Detects Low Stock</h3>
+                    <p>The Demand Planner continuously monitors inventory levels. When stock falls below 7 days, it triggers an alert and recommends creating a purchase order.</p>
+                </div>
+                <div class="timeline-number">1</div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-content">
+                    <h3>Harvest Scout Activates</h3>
+                    <p>The AI agent sends personalized SMS messages to farmers in their local language, considering weather conditions and communicating demand urgency.</p>
+                </div>
+                <div class="timeline-number">2</div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-content">
+                    <h3>Farmers Respond</h3>
+                    <p>Farmers reply with harvest quantities via SMS or app. AI aggregates forecasts and calculates Available-to-Promise inventory.</p>
+                </div>
+                <div class="timeline-number">3</div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-content">
+                    <h3>Station Commits</h3>
+                    <p>Buying station operators review ATP and propose realistic commitments to SMEs. Physical inventory + incoming forecasts = confident promises.</p>
+                </div>
+                <div class="timeline-number">4</div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-content">
+                    <h3>Quality Check & Dispatch</h3>
+                    <p>AI-powered grading analyzes crop quality at the station. Variance Auditor monitors weight discrepancies during transit to detect fraud.</p>
+                </div>
+                <div class="timeline-number">5</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <h2>Ready to Transform Your Supply Chain?</h2>
+        <p>Join hundreds of farmers and SMEs already using Umaly to optimize their agricultural operations.</p>
+        <div class="cta-buttons">
+            <a href="#" class="btn-primary">Start Free Trial</a>
+            <a href="#" class="btn-secondary">Schedule Demo</a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer id="contact">
+        <div class="footer-content">
+            <div>
+                <div class="footer-logo">
+                    <div class="logo-icon" style="width: 40px; height: 40px; font-size: 20px;">🌾</div>
+                    <span>Umaly</span>
+                </div>
+                <p class="footer-desc">AI-powered agricultural supply chain management for Mindanao. Connecting farmers, stations, and SMEs with intelligent coordination.</p>
+            </div>
+            <div class="footer-section">
+                <h4>Product</h4>
+                <ul class="footer-links">
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#agents">AI Agents</a></li>
+                    <li><a href="#how-it-works">How It Works</a></li>
+                    <li><a href="#">Pricing</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Company</h4>
+                <ul class="footer-links">
+                    <li><a href="#">About Us</a></li>
+                    <li><a href="#">Careers</a></li>
+                    <li><a href="#">Blog</a></li>
+                    <li><a href="#">Contact</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Support</h4>
+                <ul class="footer-links">
+                    <li><a href="#">Documentation</a></li>
+                    <li><a href="#">Help Center</a></li>
+                    <li><a href="#">Community</a></li>
+                    <li><a href="#">Status</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2025 Umaly - Mindanao Agri-OS. All rights reserved. Built for farmers, by innovators.</p>
+        </div>
+    </footer>
+</body>
+</html>
