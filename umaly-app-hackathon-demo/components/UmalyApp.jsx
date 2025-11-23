@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '@/utils/supabaseClient';
 import { 
   MessageSquare, Truck, BarChart3, Sprout, Coffee, Camera, CheckCircle, 
   AlertTriangle, Users, Package, Calendar, Wifi, WifiOff, ChevronRight,
@@ -8,54 +9,10 @@ import {
   Brain, Sparkles, Zap, Store, Building2, ShoppingCart, Send, Archive, 
   XCircle, AlertOctagon, FileText, Scale, Printer, Box, ArrowDownToLine, 
   ArrowUpFromLine, User, LogOut, ChevronsUpDown, Settings, ThumbsUp, ThumbsDown,
-  TrendingUp, CloudRain, Activity
+  TrendingUp, CloudRain, Activity, ArrowUp
 } from 'lucide-react';
 
-// --- REALISTIC DATA SETS ---
-
-const DATA_SETS = {
-  Cacao: {
-    brand: "Cacao de Davao",
-    theme: "emerald",
-    stations: [
-      { id: 's1', name: "Calinan Coop Station", location: "Calinan District", inventory: { wet: 2300, dry: 500 } },
-      { id: 's2', name: "Agdao Consolidation Hub", location: "Agdao Proper", inventory: { wet: 1200, dry: 3000 } }
-    ],
-    farmers: [
-      { id: 101, name: "Mang Juan", crop: "Cacao", location: "Malagos Farms", phone: "0917-555-0101", rating: 4.8, distance: "2km from Calinan" },
-      { id: 102, name: "Ate Lisa", crop: "Cacao", location: "Sirib Growers", phone: "0927-123-4567", rating: 4.9, distance: "12km from Calinan" },
-      { id: 103, name: "Paquibato Clan", crop: "Cacao", location: "Paquibato District", phone: "0918-999-8888", rating: 4.5, distance: "45km from Agdao" },
-    ],
-    logs: [
-      { id: 501, farmer: "Mang Juan", weight: 150, grade: "A", state: "Wet", time: "07:45 AM", station: "Calinan Coop Station" },
-      { id: 502, farmer: "Ate Lisa", weight: 80, grade: "B", state: "Wet", time: "09:30 AM", station: "Calinan Coop Station" },
-    ],
-    orders: [
-      { id: 'PO-1001', stationId: 's1', stationName: "Calinan Coop Station", amount: 5000, committed: 4500, filled: 2300, cropState: 'Wet', status: 'Commitment Proposed', deadline: '2023-11-25' },
-      { id: 'PO-1002', stationId: 's2', stationName: "Agdao Consolidation Hub", amount: 2000, committed: 2000, filled: 2000, dispatched: 2000, cropState: 'Dry', status: 'In Transit', deadline: '2023-11-24', eta: '2 hrs' }
-    ]
-  },
-  Coffee: {
-    brand: "FROG KAFFEE",
-    theme: "orange",
-    stations: [
-      { id: 's3', name: "Toril Depot", location: "Toril", inventory: { wet: 800, dry: 150 } },
-      { id: 's4', name: "Bansalan Roastery Hub", location: "Bansalan, Davao del Sur", inventory: { wet: 450, dry: 1200 } }
-    ],
-    farmers: [
-      { id: 201, name: "Mt. Apo Civet Farm", crop: "Coffee", location: "Kapatagan", phone: "0919-000-1111", rating: 5.0, distance: "8km from Bansalan" },
-      { id: 202, name: "Marilog Tribal Growers", crop: "Coffee", location: "Marilog Dist.", phone: "0920-222-3333", rating: 4.7, distance: "60km from Toril" },
-      { id: 203, name: "Bukidnon High Roast", crop: "Coffee", location: "Lantapan", phone: "0917-888-7777", rating: 4.9, distance: "Transport via Bukidnon-Davao Rd" },
-    ],
-    logs: [
-      { id: 601, farmer: "Mt. Apo Civet Farm", weight: 45, grade: "Premium", state: "Cherry", time: "06:15 AM", station: "Bansalan Roastery Hub" },
-    ],
-    orders: [
-      { id: 'PO-2001', stationId: 's4', stationName: "Bansalan Roastery Hub", amount: 1000, committed: 1000, filled: 1200, dispatched: 1200, cropState: 'Dry', status: 'In Transit', deadline: '2023-11-26', eta: '45 mins' }
-    ]
-  }
-};
-
+// --- CONSTANTS ---
 const ACCOUNTS = [
   { id: 'acc_cacao', name: "Juan Dela Cruz", role: "Ops Manager", org: "Cacao de Davao", type: "Cacao", initials: "JD", color: "bg-amber-600" },
   { id: 'acc_coffee', name: "Maria Santos", role: "Procurement Lead", org: "FROG KAFFEE", type: "Coffee", initials: "MS", color: "bg-orange-600" }
@@ -64,25 +21,113 @@ const ACCOUNTS = [
 export default function UmalyApp() {
   const [activeView, setActiveView] = useState('dashboard');
   const [currentUser, setCurrentUser] = useState(ACCOUNTS[0]);
-  const [currentData, setCurrentData] = useState(DATA_SETS['Cacao']);
   
-  // --- CENTRALIZED STATE ---
-  const [forecasts, setForecasts] = useState([]); 
-  const [logs, setLogs] = useState([]); 
+  // --- LIVE STATE ---
+  const [farmers, setFarmers] = useState([]);
+  const [stations, setStations] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [stations, setStations] = useState([]); 
+  const [logs, setLogs] = useState([]);
+  const [forecasts, setForecasts] = useState([]);
   const [notification, setNotification] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Switch Data when User Switches
-  useEffect(() => {
-    const data = DATA_SETS[currentUser.type];
-    setCurrentData(data);
-    setLogs(data.logs);
-    setOrders(data.orders);
-    setStations(data.stations);
-    setForecasts([]); 
-    triggerNotification(`Switched workspace to ${currentUser.org}`, 'info');
+  // --- REUSABLE FETCH FUNCTION ---
+  const fetchData = useCallback(async () => {
+    // 1. Get Farmers
+    const { data: farmersData } = await supabase.from('farmers').select('*').eq('crop_type', currentUser.type);
+    
+    let currentFarmerIds = [];
+    if(farmersData) {
+        currentFarmerIds = farmersData.map(f => f.id);
+        setFarmers(farmersData.map(f => ({
+            id: f.id, 
+            name: f.full_name, 
+            crop: f.crop_type, 
+            location: f.location || f.barangay || '', 
+            phone: f.phone_number, 
+            distance: 'Local', 
+            rating: f.trust_score || 5.0
+        })));
+    }
+
+    // 2. Get Stations
+    const { data: stationData } = await supabase.from('stations').select('*');
+    if(stationData) setStations(stationData.map(s => ({
+      id: s.id, name: s.name, location: s.location, inventory: { wet: s.inventory_wet_kg, dry: s.inventory_dry_kg }
+    })));
+
+    // 3. Get Orders
+    const { data: orderData } = await supabase.from('orders').select('*, stations(name)').order('created_at', { ascending: false });
+    if(orderData) setOrders(orderData.map(o => ({
+      id: o.id.slice(0,8).toUpperCase(),
+      originalId: o.id,
+      stationId: o.station_id,
+      stationName: o.stations?.name,
+      amount: o.target_amount_kg,
+      filled: o.filled_amount_kg,
+      committed: o.committed_amount_kg,
+      dispatched: o.dispatched_amount_kg,
+      received: o.received_amount_kg,
+      variance: o.variance_kg,
+      cropState: o.crop_state,
+      status: o.status,
+      deadline: o.deadline,
+      notes: o.quality_notes
+    })));
+
+    // 4. Get Logs
+    const { data: logData } = await supabase.from('harvest_logs').select('*').order('created_at', { ascending: false }).limit(20);
+    if(logData) {
+      const mappedLogs = logData.map(l => {
+          const farmerName = farmersData?.find(f => f.id === l.farmer_id)?.full_name || "Unknown Farmer";
+          return {
+            id: l.id,
+            farmer: farmerName,
+            weight: l.weight_kg,
+            grade: l.quality_grade,
+            state: l.crop_state,
+            time: new Date(l.created_at).toLocaleTimeString(),
+            station: "Station"
+          };
+      });
+      setLogs(mappedLogs);
+    }
+
+    // 5. Get Forecasts
+    if (currentFarmerIds.length > 0) {
+        const { data: forecastData } = await supabase
+            .from('forecasts')
+            .select('*')
+            .in('farmer_id', currentFarmerIds)
+            .order('created_at', { ascending: false });
+            
+        if(forecastData) setForecasts(forecastData.map(f => ({
+            id: f.id,
+            farmerId: f.farmer_id,
+            amount: f.predicted_amount_kg || f.amount, 
+            status: f.status || 'Pending'
+        })));
+    } else {
+        setForecasts([]);
+    }
+    
+    setLoading(false);
   }, [currentUser]);
+
+  // --- INITIAL LOAD & REALTIME SUBSCRIPTION ---
+  useEffect(() => {
+    fetchData();
+
+    const channel = supabase
+      .channel('public:db_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'harvest_logs' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stations' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'forecasts' }, () => fetchData())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchData]);
 
   const triggerNotification = (msg, type = 'success') => {
     setNotification({ msg, type });
@@ -90,46 +135,214 @@ export default function UmalyApp() {
   };
 
   // --- ACTIONS ---
-  const handleCreateOrder = (orderData) => {
-    const newOrder = { id: `PO-${Math.floor(Math.random()*10000)}`, stationId: orderData.stationId, stationName: stations.find(s => s.id === orderData.stationId).name, amount: parseInt(orderData.amount), committed: 0, filled: 0, dispatched: 0, received: 0, cropState: orderData.cropState, status: 'Pending Review', deadline: orderData.deadline };
-    setOrders(prev => [newOrder, ...prev]);
-    triggerNotification(`PO Created: Requesting ${newOrder.amount}kg from ${newOrder.stationName}`, 'info');
-  };
-  const handleCommitOrder = (orderId, committedAmount) => { setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'Commitment Proposed', committed: parseInt(committedAmount) } : o)); triggerNotification(`Commitment proposed to SME.`, 'success'); };
-  const handleAcceptCommitment = (orderId) => { setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'Collecting' } : o)); triggerNotification(`Commitment accepted!`, 'success'); };
-  const handleRejectCommitment = (orderId) => { setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'Pending Review', committed: 0 } : o)); triggerNotification(`Commitment rejected.`, 'info'); };
-  const handleCancelOrder = (orderId) => { setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'Cancelled' } : o)); triggerNotification(`Order ${orderId} cancelled.`, 'info'); };
-  const handleDispatchOrder = (orderId) => { setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'In Transit', dispatched: o.filled, eta: '4 hrs' } : o)); triggerNotification(`Shipment Dispatched!`, 'success'); };
-  const handleReceiveOrder = (orderId, receivedAmount, notes) => { setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: Math.abs(receivedAmount - o.dispatched) > 5 ? 'Received (Variance)' : 'Received (Perfect)', received: parseInt(receivedAmount), variance: receivedAmount - o.dispatched, notes } : o)); triggerNotification(`Received ${orderId}.`, 'success'); };
-  
-  const handleStationLog = (logData) => {
-    const newLog = { id: Date.now(), farmer: logData.farmerName, weight: parseInt(logData.weight), grade: logData.grade, state: logData.state, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), station: logData.stationName };
-    setLogs(prev => [newLog, ...prev]);
-    setStations(prev => prev.map(s => {
-      if (s.name === logData.stationName) {
-        const isWet = logData.state === 'Wet' || logData.state === 'Cherry';
-        return { ...s, inventory: { wet: isWet ? s.inventory.wet + newLog.weight : s.inventory.wet, dry: !isWet ? s.inventory.dry + newLog.weight : s.inventory.dry } };
-      }
-      return s;
-    }));
-    setOrders(prev => prev.map(o => {
-      if (o.stationName === logData.stationName && (o.status === 'Committed' || o.status === 'Collecting')) {
-        return { ...o, filled: o.filled + newLog.weight };
-      }
-      return o;
-    }));
-    if (logData.forecastId) {
-      setForecasts(prev => prev.map(f => f.id === logData.forecastId ? { ...f, status: "Arrived" } : f));
+
+  const handleCreateOrder = async (orderData) => {
+    const { error } = await supabase.from('orders').insert({
+      station_id: orderData.stationId,
+      target_amount_kg: Number(orderData.amount),
+      crop_state: orderData.cropState,
+      deadline: orderData.deadline,
+      status: 'Pending Review'
+    });
+    if (!error) {
+      triggerNotification(`PO Sent to Database`, 'info');
+      await fetchData(); 
     }
-    triggerNotification(`Log Success: ${logData.weight}kg received.`, 'success');
   };
 
-  const handleFarmerForecast = (farmerId, amount) => {
-    const farmer = currentData.farmers.find(f => f.id === farmerId);
-    const newForecast = { id: Date.now(), farmerId, amount: parseInt(amount), date: "Today", status: "Pending" };
-    setForecasts(prev => [newForecast, ...prev]);
-    triggerNotification(`AI Forecast: ${farmer.name} confirmed ${amount}kg.`, 'info');
+  const handleCommitOrder = async (orderId, committedAmount) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    await supabase.from('orders').update({ 
+      status: 'Commitment Proposed', 
+      committed_amount_kg: Number(committedAmount) 
+    }).eq('id', order.originalId);
+    triggerNotification(`Commitment Synced`, 'success');
+    await fetchData();
   };
+
+  const handleAcceptCommitment = async (orderId) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    await supabase.from('orders').update({ status: 'Collecting' }).eq('id', order.originalId);
+    triggerNotification(`Commitment Accepted`, 'success');
+    await fetchData();
+  };
+  
+  const handleRejectCommitment = async (orderId) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    await supabase.from('orders').update({ status: 'Pending Review', committed_amount_kg: 0 }).eq('id', order.originalId);
+    triggerNotification(`Commitment Rejected`, 'info');
+    await fetchData();
+  };
+
+  const handleCancelOrder = async (orderId) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    await supabase.from('orders').update({ status: 'Cancelled' }).eq('id', order.originalId);
+    triggerNotification(`Order Cancelled`, 'info');
+    await fetchData();
+  };
+
+  const handleFillOrder = async (orderId) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+
+    // Calculate needed amount
+    const needed = (order.committed || 0) - (order.filled || 0);
+    if (needed <= 0) return;
+
+    // Check inventory
+    const station = stations.find(s => s.id === order.stationId);
+    if (!station) return;
+    
+    const isWet = order.cropState === 'Wet' || order.cropState === 'Cherry';
+    const currentStock = isWet ? (station.inventory?.wet || 0) : (station.inventory?.dry || 0);
+    
+    if (currentStock < needed) {
+       triggerNotification(`Insufficient Stock (${currentStock}kg avail)`, 'error');
+       return;
+    }
+
+    // Update Order to Filled
+    await supabase.from('orders').update({
+      filled_amount_kg: (order.filled || 0) + needed
+    }).eq('id', order.originalId);
+    
+    triggerNotification(`Stock Allocated to Order`, 'success');
+    await fetchData();
+  };
+
+  const handleDispatchOrder = async (orderId) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+
+    // 1. Deduct from Station Inventory
+    const station = stations.find(s => s.id === order.stationId);
+    if (station) {
+        const isWet = order.cropState === 'Wet' || order.cropState === 'Cherry';
+        const invKey = isWet ? 'inventory_wet_kg' : 'inventory_dry_kg';
+        const currentVal = isWet ? (station.inventory?.wet || 0) : (station.inventory?.dry || 0);
+        
+        // Ensure we don't go below zero
+        const newVal = Math.max(0, currentVal - (order.filled || 0));
+
+        await supabase.from('stations').update({
+            [invKey]: newVal
+        }).eq('id', station.id);
+    }
+
+    // 2. Update Order Status
+    await supabase.from('orders').update({ 
+      status: 'In Transit', 
+      dispatched_amount_kg: order.filled 
+    }).eq('id', order.originalId);
+    
+    triggerNotification(`Shipment Dispatched & Stock Updated`, 'success');
+    await fetchData();
+  };
+
+  const handleReceiveOrder = async (orderId, receivedAmount, notes) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    const variance = Number(receivedAmount) - order.dispatched;
+    const status = Math.abs(variance) > 5 ? 'Received (Variance)' : 'Received';
+    
+    await supabase.from('orders').update({ 
+      status: status, 
+      received_amount_kg: Number(receivedAmount),
+      variance_kg: variance,
+      quality_notes: notes
+    }).eq('id', order.originalId);
+    triggerNotification(`Receiving Report Saved`, 'success');
+    await fetchData();
+  };
+
+  const handleStationLog = async (logData) => {
+    console.log("Processing Log:", logData);
+    const weight = Number(logData.weight) || 0;
+
+    // 1. Insert Log
+    const { error: logError } = await supabase.from('harvest_logs').insert({
+      farmer_id: logData.farmerId,
+      station_id: logData.stationId,
+      weight_kg: weight,
+      quality_grade: logData.grade,
+      crop_state: logData.state
+    });
+
+    if (logError) {
+      console.error("Log Error", logError);
+      triggerNotification("Error saving log", "error");
+      return;
+    }
+
+    // 2. Update Station Inventory
+    const station = stations.find(s => s.id === logData.stationId);
+    if (station) {
+        const isWet = logData.state === 'Wet' || logData.state === 'Cherry';
+        const updateField = isWet ? 'inventory_wet_kg' : 'inventory_dry_kg';
+        const currentVal = isWet ? (station.inventory?.wet || 0) : (station.inventory?.dry || 0);
+        const newVal = currentVal + weight;
+
+        await supabase.from('stations').update({
+          [updateField]: newVal
+        }).eq('id', logData.stationId);
+    }
+
+    // 3. Update Forecast Status
+    if (logData.forecastId) {
+        await supabase.from('forecasts').update({ 
+            status: 'Arrived' 
+        }).eq('id', logData.forecastId);
+    }
+
+    // 4. Update Active Order
+    const isWet = logData.state === 'Wet' || logData.state === 'Cherry';
+    const activeOrder = orders.find(o => 
+        o.stationId === logData.stationId && 
+        o.cropState === (isWet ? 'Wet' : 'Dry') && 
+        (o.status === 'Collecting' || o.status === 'Commitment Proposed')
+    );
+
+    if (activeOrder) {
+        await supabase.from('orders').update({
+          filled_amount_kg: (activeOrder.filled || 0) + weight
+        }).eq('id', activeOrder.originalId);
+    }
+
+    triggerNotification(`Harvest Logged & Inventory Updated`, 'success');
+    await fetchData(); 
+  };
+
+  const handleFarmerForecast = async (farmerId, amount) => {
+    const { error } = await supabase.from('forecasts').insert({
+      farmer_id: farmerId,
+      predicted_amount_kg: Number(amount), 
+      status: "Pending"
+    });
+    
+    if (error) {
+        if(error.message.includes('column "predicted_amount_kg" of relation "forecasts" does not exist')) {
+           await supabase.from('forecasts').insert({
+              farmer_id: farmerId,
+              amount: Number(amount),
+              status: "Pending"
+           });
+           await fetchData();
+           return;
+        }
+        console.error("Forecast Error:", error);
+        triggerNotification("Failed to submit forecast", "error");
+    } else {
+        const farmer = farmers.find(f => f.id === farmerId);
+        triggerNotification(`AI Forecast: ${farmer ? farmer.name : 'Farmer'} confirmed ${amount}kg.`, 'info');
+        await fetchData();
+    }
+  };
+
+  if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 text-emerald-600 font-bold animate-pulse">Connecting to Umaly Agri-OS...</div>;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 flex flex-col md:flex-row overflow-hidden">
@@ -153,17 +366,18 @@ export default function UmalyApp() {
 
       <main className="flex-1 overflow-y-auto p-4 md:p-8 relative bg-slate-50/50">
         <Header activeView={activeView} currentUser={currentUser} />
-        {notification && <div className={`fixed top-6 right-6 px-6 py-4 rounded-lg shadow-2xl z-[60] animate-bounce-in flex items-start gap-4 max-w-sm backdrop-blur-sm ${notification.type === 'success' ? 'bg-emerald-600/95 text-white' : 'bg-blue-600/95 text-white'}`}><div className="mt-1 p-1 bg-white/20 rounded-full"><CheckCircle size={16} /></div><div><h4 className="font-bold text-sm uppercase tracking-wide opacity-90">{notification.type === 'success' ? 'Success' : 'AI Update'}</h4><p className="text-sm font-medium leading-snug">{notification.msg}</p></div></div>}
+        {notification && <div className={`fixed top-6 right-6 px-6 py-4 rounded-lg shadow-2xl z-[60] animate-bounce-in flex items-start gap-4 max-w-sm backdrop-blur-sm ${notification.type === 'success' ? 'bg-emerald-600/95 text-white' : (notification.type === 'info' ? 'bg-blue-600/95 text-white' : 'bg-indigo-600/95 text-white')}`}><div className="mt-1 p-1 bg-white/20 rounded-full"><CheckCircle size={16} /></div><div><h4 className="font-bold text-sm uppercase tracking-wide opacity-90">{notification.type === 'success' ? 'Success' : 'DB Update'}</h4><p className="text-sm font-medium leading-snug">{notification.msg}</p></div></div>}
 
-        {activeView === 'dashboard' && <DashboardView cropType={currentUser.type} forecasts={forecasts} logs={logs} stations={stations} brand={currentData.brand} orders={orders} onCreateOrder={handleCreateOrder} onCancelOrder={handleCancelOrder} onReceiveOrder={handleReceiveOrder} onAcceptCommitment={handleAcceptCommitment} onRejectCommitment={handleRejectCommitment} />}
-        {activeView === 'station' && <BuyingStationView cropType={currentUser.type} farmers={currentData.farmers} stations={stations} forecasts={forecasts} onLog={handleStationLog} orders={orders} onDispatch={handleDispatchOrder} onCommit={handleCommitOrder} />}
-        {activeView === 'farmer' && <FarmerSimulator cropType={currentUser.type} farmers={currentData.farmers} onForecast={handleFarmerForecast} orders={orders} />}
+        {activeView === 'dashboard' && <DashboardView cropType={currentUser.type} forecasts={forecasts} logs={logs} stations={stations} brand={currentUser.org} orders={orders} onCreateOrder={handleCreateOrder} onCancelOrder={handleCancelOrder} onReceiveOrder={handleReceiveOrder} onAcceptCommitment={handleAcceptCommitment} onRejectCommitment={handleRejectCommitment} />}
+        {activeView === 'station' && <BuyingStationView cropType={currentUser.type} farmers={farmers} stations={stations} forecasts={forecasts} onLog={handleStationLog} orders={orders} onDispatch={handleDispatchOrder} onCommit={handleCommitOrder} onFill={handleFillOrder} />}
+        {activeView === 'farmer' && <FarmerSimulator cropType={currentUser.type} farmers={farmers} onForecast={handleFarmerForecast} orders={orders} />}
       </main>
     </div>
   );
 }
 
-// --- NAVBTN COMPONENT ---
+// --- SUB-COMPONENTS ---
+
 const NavBtn = ({ icon, label, active, onClick, count }) => (
   <button onClick={onClick} className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all w-full whitespace-nowrap group ${active ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/20' : 'text-slate-300 hover:bg-slate-800'}`}>
     <div className="flex items-center gap-3">{icon}<span className="font-medium text-sm">{label}</span></div>
@@ -171,7 +385,6 @@ const NavBtn = ({ icon, label, active, onClick, count }) => (
   </button>
 );
 
-// --- USER SWITCHER COMPONENT ---
 const UserSwitcher = ({ currentUser, onSwitch }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -191,28 +404,19 @@ const UserSwitcher = ({ currentUser, onSwitch }) => {
         <ChevronsUpDown size={16} className="text-slate-500" />
       </button>
       {isOpen && (
-        <div className="absolute bottom-full left-0 w-full mb-2 bg-slate-800 rounded-xl border border-slate-700 shadow-2xl overflow-hidden z-50">
-          <div className="p-2">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-2 py-1.5">Switch Organization</p>
-            {ACCOUNTS.map(acc => (
+        <div className="absolute bottom-full left-0 w-full mb-2 bg-slate-800 rounded-xl border border-slate-700 shadow-2xl overflow-hidden z-50 p-2">
+           {ACCOUNTS.map(acc => (
               <button key={acc.id} onClick={() => { onSwitch(acc); setIsOpen(false); }} className={`flex items-center gap-3 w-full p-2 rounded-lg transition-colors ${currentUser.id === acc.id ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'}`}>
                 <div className={`w-8 h-8 rounded-full ${acc.color} flex items-center justify-center text-xs font-bold text-white`}>{acc.initials}</div>
-                <div className="text-left"><p className="font-medium text-sm">{acc.org}</p><p className="text-[10px] opacity-70">{acc.role}</p></div>
-                {currentUser.id === acc.id && <CheckCircle size={14} className="ml-auto text-emerald-400"/>}
+                <div className="text-left"><p className="font-medium text-sm">{acc.org}</p></div>
               </button>
-            ))}
-          </div>
-          <div className="border-t border-slate-700 p-2 bg-slate-900/50">
-            <button className="flex items-center gap-3 w-full p-2 text-slate-400 hover:text-white text-sm rounded-lg hover:bg-slate-800 transition-colors"><Settings size={16} /> Account Settings</button>
-            <button className="flex items-center gap-3 w-full p-2 text-slate-400 hover:text-red-400 text-sm rounded-lg hover:bg-slate-800 transition-colors"><LogOut size={16} /> Log Out</button>
-          </div>
+           ))}
         </div>
       )}
     </div>
   );
 };
 
-// --- HEADER COMPONENT ---
 const Header = ({ activeView, currentUser }) => (
   <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
     <div>
@@ -247,42 +451,50 @@ const DashboardView = ({ cropType, forecasts, logs, stations, brand, orders, onC
   const [receiveData, setReceiveData] = useState({ amount: '', notes: '' });
   const [receivingOrder, setReceivingOrder] = useState(null);
   const [viewingReport, setViewingReport] = useState(null);
-
-  const totalWet = stations.reduce((acc, s) => acc + s.inventory.wet, 0);
-  const dailyBurnRate = 200; 
-  const daysOfInventory = Math.round(totalWet / dailyBurnRate);
-  const isLowStock = daysOfInventory < 7;
-
   const [aiInsight, setAiInsight] = useState(null);
-  // Add this Effect
+  const [aiLoading, setAiLoading] = useState(false); 
+
+  const totalWet = stations.reduce((acc, s) => acc + (s.inventory?.wet || 0), 0);
+  
+  useEffect(() => { if (stations.length > 0) setNewOrder(prev => ({ ...prev, stationId: stations[0].id })); }, [stations]);
+
+  // AI Insight Trigger
   useEffect(() => {
     const fetchAiInsight = async () => {
-      // 1. Gather Context
-      const context = {
-        stock: stations.reduce((acc, s) => acc + s.inventory.wet, 0), // Total Wet Stock
-        burnRate: 200, // Hardcoded for demo, usually from DB
-        pendingOrders: orders.filter(o => o.status !== 'Received').length
-      };
-
-      // 2. Call API
-      const res = await fetch('/api/ai-agent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentType: 'planner', context })
-      });
-
-      const data = await res.json();
-      setAiInsight(data);
+      if (stations.length === 0) return; 
+      setAiLoading(true);
+      const context = { stock: totalWet, burnRate: 200, pendingOrders: orders.filter(o => o.status !== 'Received').length };
+      try {
+        const res = await fetch('/api/ai-agent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agentType: 'planner', context }) });
+        if (!res.ok) throw new Error('AI API Error');
+        const data = await res.json();
+        setAiInsight(data);
+      } catch (e) { 
+        setAiInsight({ insight: "AI Service Offline. Manual check recommended.", status: "Healthy" });
+      } finally {
+        setAiLoading(false);
+      }
     };
-
-    if(stations.length > 0) fetchAiInsight();
-  }, [stations, orders]);
+    fetchAiInsight();
+  }, [stations, orders, totalWet]);
 
   const isOverdue = (dateStr) => {
     if (!dateStr) return false;
     const deadline = new Date(dateStr);
     const today = new Date("2023-11-20");
     return deadline < today;
+  };
+
+  const handleAutoGenerate = async () => {
+    if (!aiInsight?.recommended_amount) return;
+    const targetStation = stations[0]; 
+    await onCreateOrder({
+        stationId: targetStation.id,
+        amount: aiInsight.recommended_amount,
+        cropState: 'Wet',
+        deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    });
+    setActiveTab('procurement');
   };
 
   return (
@@ -294,20 +506,27 @@ const DashboardView = ({ cropType, forecasts, logs, stations, brand, orders, onC
 
       {activeTab === 'overview' ? (
         <div className="space-y-6">
-          {/* AI DEMAND PLANNER */}
           <div className="bg-indigo-900 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
              <div className="relative z-10 flex flex-col md:flex-row gap-6 items-start md:items-center">
                 <div className="bg-indigo-800 p-4 rounded-full border border-indigo-700"><Brain size={32} className="text-indigo-300" /></div>
                 <div className="flex-1">
                    <h3 className="text-xl font-bold mb-2 flex items-center gap-2">AI Demand Planner <span className="text-xs bg-indigo-500 px-2 py-0.5 rounded-full uppercase tracking-wider">Autonomous</span></h3>
-                   <div className="grid grid-cols-3 gap-4 mb-4 text-indigo-200 text-sm">
-                      <div><p className="text-xs opacity-60 uppercase">Current Stock</p><p className="font-bold text-white">{totalWet} kg</p></div>
-                      <div><p className="text-xs opacity-60 uppercase">Daily Burn Rate</p><p className="font-bold text-white">{dailyBurnRate} kg/day</p></div>
-                      <div><p className="text-xs opacity-60 uppercase">Days Remaining</p><p className={`font-bold ${isLowStock ? 'text-red-400' : 'text-emerald-400'}`}>{daysOfInventory} Days</p></div>
+                   <div className="text-sm bg-indigo-800/50 p-3 rounded-lg border border-indigo-700/50 leading-relaxed min-h-[60px] flex items-center">
+                     {aiLoading ? (
+                        <div className="flex items-center gap-2 text-indigo-200">
+                            <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                            <span>Analyzing live supply chain data...</span>
+                        </div>
+                     ) : (
+                        <p>{aiInsight ? (aiInsight.insight || aiInsight.recommendation) : "Waiting for data..."}</p>
+                     )}
                    </div>
-                   <p className="text-sm bg-indigo-800/50 p-3 rounded-lg border border-indigo-700/50 leading-relaxed">{isLowStock ? `🚨 Critical Alert: Inventory will run out in ${daysOfInventory} days. Based on historical lead times (3 days), I recommend creating a PO for 2,000kg immediately.` : `✅ Operations Healthy. Supply coverage is sufficient. Market prices trending up (+5%); consider locking in future order.`}</p>
                 </div>
-                {isLowStock && <button onClick={() => setActiveTab('procurement')} className="px-6 py-3 bg-white text-indigo-900 font-bold rounded-xl shadow-lg hover:bg-indigo-50 transition-colors flex items-center gap-2"><Zap size={18} className="text-amber-500 fill-current" /> Auto-Generate PO</button>}
+                {!aiLoading && aiInsight?.status === 'Critical' && (
+                    <button onClick={handleAutoGenerate} className="px-6 py-3 bg-white text-indigo-900 font-bold rounded-xl shadow-lg hover:bg-indigo-50 transition-colors flex items-center gap-2">
+                        <Zap size={18} className="text-amber-500 fill-current" /> Auto-Generate PO ({aiInsight.recommended_amount}kg)
+                    </button>
+                )}
              </div>
              <div className="absolute -right-10 -bottom-20 opacity-10"><Activity size={300}/></div>
           </div>
@@ -328,14 +547,14 @@ const DashboardView = ({ cropType, forecasts, logs, stations, brand, orders, onC
               const isTransit = order.status === 'In Transit';
               const isReceived = order.status.includes('Received');
               const isProposed = order.status === 'Commitment Proposed';
-              const overdue = isOverdue(order.deadline) && !isReceived && order.status !== 'Cancelled';
+              const overdue = false; 
               
               return (
-              <div key={order.id} className={`bg-white p-6 rounded-xl shadow-sm border ${isProposed ? 'border-blue-300 ring-1 ring-blue-100' : isReceived ? 'border-slate-100 bg-slate-50' : 'border-slate-200'} flex flex-col md:flex-row justify-between items-start gap-4`}>
+              <div key={order.originalId || order.id} className={`bg-white p-6 rounded-xl shadow-sm border ${isProposed ? 'border-blue-300 ring-1 ring-blue-100' : isReceived ? 'border-slate-100 bg-slate-50' : 'border-slate-200'} flex flex-col md:flex-row justify-between items-start gap-4`}>
                 <div className="flex items-start gap-4 flex-1">
                   <div className={`p-3 rounded-lg ${isTransit ? 'bg-blue-100 text-blue-600 animate-pulse' : isReceived ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-600'}`}>{isReceived ? <ClipboardCheck size={24}/> : overdue ? <AlertOctagon size={24} className="text-red-500"/> : <Truck size={24}/>}</div>
                   <div>
-                    <div className="flex items-center gap-2"><h4 className="font-bold text-lg text-slate-800">{order.id}</h4><span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${isTransit ? 'bg-blue-600 text-white' : isProposed ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'}`}>{order.status}</span>{overdue && <span className="text-[10px] font-bold bg-red-600 text-white px-2 py-0.5 rounded animate-pulse">OVERDUE</span>}</div>
+                    <div className="flex items-center gap-2"><h4 className="font-bold text-lg text-slate-800">{order.id}</h4><span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${isTransit ? 'bg-blue-600 text-white' : isProposed ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'}`}>{order.status}</span></div>
                     <p className="text-sm text-slate-500 mt-1"><span className="font-medium text-slate-700">{order.stationName}</span> &rarr; Factory</p>
                   </div>
                 </div>
@@ -357,7 +576,7 @@ const DashboardView = ({ cropType, forecasts, logs, stations, brand, orders, onC
           </div>
           
           {/* MODALS */}
-          {isOrderModalOpen && <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4"><div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl"><h3 className="font-bold text-xl text-slate-800 mb-4">Create PO</h3><div className="space-y-4"><div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Station</label><select className="w-full p-3 border rounded-lg" onChange={(e) => setNewOrder({...newOrder, stationId: e.target.value})}>{stations.map(s => <option key={s.id} value={s.id}>{s.name} (Stock: {s.inventory.wet}kg)</option>)}</select></div><div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Amount (kg)</label><input type="number" className="w-full p-3 border rounded-lg" value={newOrder.amount} onChange={(e) => setNewOrder({...newOrder, amount: e.target.value})}/></div><div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Deadline</label><input type="date" className="w-full p-3 border rounded-lg" onChange={(e) => setNewOrder({...newOrder, deadline: e.target.value})}/></div><button onClick={() => { onCreateOrder(newOrder); setIsOrderModalOpen(false); }} className="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg hover:bg-emerald-700">Send PO</button><button onClick={() => setIsOrderModalOpen(false)} className="w-full text-slate-400 text-sm font-bold py-2">Cancel</button></div></div></div>}
+          {isOrderModalOpen && <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4"><div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl"><h3 className="font-bold text-xl text-slate-800 mb-4">Create PO</h3><div className="space-y-4"><div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Station</label><select className="w-full p-3 border rounded-lg" onChange={(e) => setNewOrder({...newOrder, stationId: e.target.value})}>{stations.map(s => <option key={s.id} value={s.id}>{s.name} (Stock: {s.inventory?.wet || 0}kg)</option>)}</select></div><div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Amount (kg)</label><input type="number" className="w-full p-3 border rounded-lg" value={newOrder.amount} onChange={(e) => setNewOrder({...newOrder, amount: e.target.value})}/></div><div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Deadline</label><input type="date" className="w-full p-3 border rounded-lg" onChange={(e) => setNewOrder({...newOrder, deadline: e.target.value})}/></div><button onClick={() => { onCreateOrder(newOrder); setIsOrderModalOpen(false); }} className="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg hover:bg-emerald-700">Send PO</button><button onClick={() => setIsOrderModalOpen(false)} className="w-full text-slate-400 text-sm font-bold py-2">Cancel</button></div></div></div>}
           
           {receivingOrder && <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[70] p-4"><div className="bg-white rounded-2xl w-full max-w-lg p-6 space-y-4"><h3 className="font-bold text-xl">Receive Shipment</h3><div className="grid grid-cols-2 gap-4 text-center bg-slate-50 p-4 rounded-xl"><div><p className="text-xs font-bold text-slate-400">Dispatched</p><p className="text-lg font-bold text-blue-600">{receivingOrder.dispatched} kg</p></div><div><p className="text-xs font-bold text-slate-400">Variance</p><p className={`text-lg font-bold ${parseInt(receiveData.amount)-receivingOrder.dispatched < 0 ? 'text-red-500' : 'text-emerald-500'}`}>{parseInt(receiveData.amount)-receivingOrder.dispatched || 0} kg</p></div></div><div><label className="block text-xs font-bold text-slate-500 mb-1">Actual Weight</label><input type="number" className="w-full p-3 border rounded-lg font-bold text-lg" value={receiveData.amount} onChange={(e) => setReceiveData({...receiveData, amount: e.target.value})}/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">Notes</label><textarea className="w-full p-3 border rounded-lg" rows="2" value={receiveData.notes} onChange={(e) => setReceiveData({...receiveData, notes: e.target.value})}></textarea></div><div className="flex gap-3"><button onClick={() => setReceivingOrder(null)} className="flex-1 py-3 rounded-lg font-bold text-slate-500 hover:bg-slate-100">Cancel</button><button onClick={() => { onReceiveOrder(receivingOrder.id, receiveData.amount, receiveData.notes); setReceivingOrder(null); }} className="flex-1 py-3 rounded-lg font-bold text-white bg-emerald-600 hover:bg-emerald-700">Confirm</button></div></div></div>}
 
@@ -369,28 +588,63 @@ const DashboardView = ({ cropType, forecasts, logs, stations, brand, orders, onC
 };
 
 // --- 2. BUYING STATION VIEW (RE-ARCHITECTED) ---
-const BuyingStationView = ({ cropType, farmers, stations, forecasts, onLog, orders, onDispatch, onCommit }) => {
+const BuyingStationView = ({ cropType, farmers, stations, forecasts, onLog, orders, onDispatch, onCommit, onFill }) => {
   // New Tabs: Inbound (Scale), Inventory (Stock Monitor), Outbound (Orders/Commitment)
   const [activeTab, setActiveTab] = useState('inbound'); 
-  const [selectedStation, setSelectedStation] = useState(stations[0]);
+  
+  // FIX: Use ID instead of full object to avoid stale state issues on DB updates
+  const [selectedStationId, setSelectedStationId] = useState(null);
+  
   const [commitModal, setCommitModal] = useState(null);
   const [commitAmount, setCommitAmount] = useState('');
 
   // State for Scale
   const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState({ farmerName: '', weight: '', state: cropType === 'Cacao' ? 'Wet' : 'Cherry' });
+  const [formData, setFormData] = useState({ farmerId: '', weight: '', state: cropType === 'Cacao' ? 'Wet' : 'Cherry' });
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [selectedForecast, setSelectedForecast] = useState(null);
 
-  useEffect(() => { if (stations.length > 0) setSelectedStation(stations[0]); }, [stations]);
+  useEffect(() => { 
+      if (stations && stations.length > 0 && !selectedStationId) {
+          setSelectedStationId(stations[0].id);
+      }
+  }, [stations, selectedStationId]);
   
+  // DERIVED STATE: Always get the fresh object from props
+  const selectedStation = stations.find(s => s.id === selectedStationId) || stations[0];
+  
+  if (!selectedStation) return <div className="p-10 text-center text-slate-400">Loading Stations...</div>;
+
   const stationOrders = orders.filter(o => o.stationId === selectedStation.id);
   const incomingForecastTotal = forecasts.filter(f => f.status === 'Pending').reduce((acc, f) => acc + f.amount, 0);
 
   // Handlers
   const handleScan = () => { setScanning(true); setTimeout(() => { setScanning(false); setScanResult({ quality: "Grade A", defect: "1.2%", moisture: "Optimal" }); setStep(2); }, 1500); };
-  const handleSubmit = () => { onLog({ ...formData, grade: scanResult ? scanResult.quality : 'A', forecastId: selectedForecast?.id, stationName: selectedStation.name }); setStep(1); setFormData({ farmerName: '', weight: '', state: cropType === 'Cacao' ? 'Wet' : 'Cherry' }); setSelectedForecast(null); setScanResult(null); };
+
+  const handleSelectForecast = (forecast) => {
+    const farmer = farmers.find(f => f.id === forecast.farmerId);
+    setSelectedForecast(forecast);
+    setFormData({
+        ...formData,
+        farmerId: farmer ? farmer.id : '',
+        weight: forecast.amount || ''
+    });
+    setStep(1);
+  };
+
+  const handleSubmit = () => { 
+    onLog({ 
+      ...formData, 
+      grade: scanResult ? scanResult.quality : 'A', 
+      forecastId: selectedForecast?.id, 
+      stationId: selectedStation.id 
+    }); 
+    setStep(1); 
+    setFormData({ farmerId: '', weight: '', state: cropType === 'Cacao' ? 'Wet' : 'Cherry' }); 
+    setSelectedForecast(null); 
+    setScanResult(null); 
+  };
 
   return (
     <div className="animate-fade-in pb-20">
@@ -398,7 +652,11 @@ const BuyingStationView = ({ cropType, farmers, stations, forecasts, onLog, orde
       <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="w-full md:w-auto">
           <label className="text-xs font-bold text-slate-400 uppercase block mb-1">Select Station</label>
-          <select className="block w-full font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-emerald-500" value={selectedStation.id} onChange={(e) => setSelectedStation(stations.find(s => s.id === e.target.value))}>
+          <select 
+            className="block w-full font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-emerald-500" 
+            value={selectedStationId || ''} 
+            onChange={(e) => setSelectedStationId(e.target.value)}
+          >
             {stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
@@ -417,10 +675,34 @@ const BuyingStationView = ({ cropType, farmers, stations, forecasts, onLog, orde
         </div>
       </div>
 
+      {/* === NEW: PERSISTENT INVENTORY DASHBOARD === */}
+      {selectedStation && (
+        <div className="grid grid-cols-3 gap-4 mb-6">
+           <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex flex-col shadow-sm relative overflow-hidden">
+              <div className="absolute right-2 top-2 opacity-10"><Droplets size={40}/></div>
+              <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Wet Stock</span>
+              <span className="text-2xl font-bold text-slate-800 mt-1">{selectedStation.inventory?.wet || 0} kg</span>
+           </div>
+           <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex flex-col shadow-sm relative overflow-hidden">
+              <div className="absolute right-2 top-2 opacity-10"><Sun size={40}/></div>
+              <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Dry Stock</span>
+              <span className="text-2xl font-bold text-slate-800 mt-1">{selectedStation.inventory?.dry || 0} kg</span>
+           </div>
+           <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex flex-col shadow-sm relative overflow-hidden">
+              <div className="absolute right-2 top-2 opacity-10"><MessageSquare size={40}/></div>
+              <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Incoming</span>
+              <div className="flex items-center gap-1 mt-1">
+                <span className="text-2xl font-bold text-slate-800">+{incomingForecastTotal} kg</span>
+                {incomingForecastTotal > 0 && <ArrowUp size={16} className="text-emerald-500" />}
+              </div>
+           </div>
+        </div>
+      )}
+
       {/* === TAB 1: INBOUND (The Weighing Scale) === */}
       {activeTab === 'inbound' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[600px]">
+           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[500px]">
              <div className="p-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                <h3 className="font-bold text-slate-700">Incoming Forecasts</h3>
                <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">{forecasts.filter(f => f.status === 'Pending').length} Pending</span>
@@ -431,7 +713,10 @@ const BuyingStationView = ({ cropType, farmers, stations, forecasts, onLog, orde
                    const farmer = farmers.find(fam => fam.id === f.farmerId);
                    if(!farmer) return null;
                    return (
-                     <div key={f.id} onClick={() => {setSelectedForecast(f); setFormData({...formData, farmerName: farmer.name, weight: f.amount}); setStep(1);}} className="p-4 rounded-xl border cursor-pointer hover:shadow-md bg-white border-slate-200 hover:border-emerald-300 transition-all group">
+                     <div key={f.id} 
+                        onClick={() => handleSelectForecast(f)} 
+                        className={`p-4 rounded-xl border cursor-pointer hover:shadow-md transition-all group ${selectedForecast?.id === f.id ? 'bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500' : 'bg-white border-slate-200 hover:border-emerald-300'}`}
+                     >
                         <div className="flex justify-between items-center mb-1">
                           <h4 className="font-bold text-slate-800 group-hover:text-emerald-600">{farmer.name}</h4>
                           <span className="text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded">{f.amount}kg</span>
@@ -452,7 +737,7 @@ const BuyingStationView = ({ cropType, farmers, stations, forecasts, onLog, orde
               <div className="p-8 flex-1 bg-slate-50/50">
                  {step === 1 ? (
                     <div className="max-w-md mx-auto space-y-6 animate-slide-in">
-                       <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Farmer Identification</label><select className="w-full p-4 bg-white border border-slate-300 rounded-xl font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-emerald-500" value={formData.farmerName} onChange={(e) => setFormData({...formData, farmerName: e.target.value})}><option value="">-- Select Farmer --</option>{farmers.map(f => <option key={f.id} value={f.name}>{f.name} ({f.location})</option>)}</select></div>
+                       <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Farmer Identification</label><select className="w-full p-4 bg-white border border-slate-300 rounded-xl font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-emerald-500" value={formData.farmerId} onChange={(e) => setFormData({...formData, farmerId: e.target.value})}><option value="">-- Select Farmer --</option>{farmers.map(f => <option key={f.id} value={f.id}>{f.name} ({f.location})</option>)}</select></div>
                        
                        <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Crop State</label><div className="grid grid-cols-2 gap-3"><button onClick={() => setFormData({...formData, state: cropType === 'Cacao' ? 'Wet' : 'Cherry'})} className={`p-4 rounded-xl border font-bold text-sm transition-all ${formData.state === (cropType === 'Cacao' ? 'Wet' : 'Cherry') ? 'bg-emerald-600 text-white shadow-lg border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>{cropType === 'Cacao' ? 'Wet Beans' : 'Fresh Cherry'}</button><button onClick={() => setFormData({...formData, state: cropType === 'Cacao' ? 'Dry' : 'Green'})} className={`p-4 rounded-xl border font-bold text-sm transition-all ${formData.state === (cropType === 'Cacao' ? 'Dry' : 'Green') ? 'bg-emerald-600 text-white shadow-lg border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>{cropType === 'Cacao' ? 'Dried Beans' : 'Green Beans'}</button></div></div>
 
@@ -479,40 +764,17 @@ const BuyingStationView = ({ cropType, farmers, stations, forecasts, onLog, orde
       {/* === TAB 2: INVENTORY MONITOR (NEW) === */}
       {activeTab === 'inventory' && (
         <div className="space-y-6 animate-fade-in">
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-              <p className="text-xs font-bold text-slate-400 uppercase mb-1">Physical Stock (On Hand)</p>
-              <h3 className="text-3xl font-bold text-slate-800">{(selectedStation.inventory.wet + selectedStation.inventory.dry).toLocaleString()} <span className="text-sm font-medium text-slate-400">kg</span></h3>
-              <div className="mt-3 flex gap-2 text-xs"><span className="px-2 py-1 bg-amber-100 text-amber-800 rounded font-bold">Wet: {selectedStation.inventory.wet}</span><span className="px-2 py-1 bg-emerald-100 text-emerald-800 rounded font-bold">Dry: {selectedStation.inventory.dry}</span></div>
-            </div>
-            <div className="bg-white p-6 rounded-xl border border-blue-200 shadow-sm relative overflow-hidden">
-              <div className="absolute right-0 top-0 p-4 opacity-5"><MessageSquare size={80}/></div>
-              <p className="text-xs font-bold text-blue-400 uppercase mb-1">Incoming Forecast (Chat)</p>
-              <h3 className="text-3xl font-bold text-blue-700">+{incomingForecastTotal} <span className="text-sm font-medium text-blue-400">kg</span></h3>
-              <p className="text-xs text-blue-500 mt-2 font-medium">Based on farmer SMS replies</p>
-            </div>
-            <div className="bg-white p-6 rounded-xl border border-purple-200 shadow-sm">
-              <p className="text-xs font-bold text-purple-400 uppercase mb-1">Available to Promise (ATP)</p>
-              <h3 className="text-3xl font-bold text-purple-700">
-                {(selectedStation.inventory.wet + selectedStation.inventory.dry + incomingForecastTotal - stationOrders.filter(o => o.status === 'Committed' || o.status === 'Collecting').reduce((acc, o) => acc + o.committed, 0)).toLocaleString()} 
-                <span className="text-sm font-medium text-purple-400"> kg</span>
-              </h3>
-              <p className="text-xs text-purple-500 mt-2 font-medium">Safe to commit to SMEs</p>
-            </div>
-          </div>
-
           {/* Inventory Table */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-4 border-b border-slate-200 bg-slate-50"><h4 className="font-bold text-slate-700 text-sm">Stock Breakdown</h4></div>
             <div className="p-6">
               <div className="w-full bg-slate-100 rounded-full h-4 mb-2 overflow-hidden flex">
-                <div className="bg-amber-500 h-full" style={{ width: `${(selectedStation.inventory.wet / (selectedStation.inventory.wet + selectedStation.inventory.dry)) * 100}%` }}></div>
-                <div className="bg-emerald-500 h-full" style={{ width: `${(selectedStation.inventory.dry / (selectedStation.inventory.wet + selectedStation.inventory.dry)) * 100}%` }}></div>
+                <div className="bg-amber-500 h-full" style={{ width: `${((selectedStation.inventory?.wet || 0) / ((selectedStation.inventory?.wet || 0) + (selectedStation.inventory?.dry || 0))) * 100}%` }}></div>
+                <div className="bg-emerald-500 h-full" style={{ width: `${((selectedStation.inventory?.dry || 0) / ((selectedStation.inventory?.wet || 0) + (selectedStation.inventory?.dry || 0))) * 100}%` }}></div>
               </div>
               <div className="flex justify-between text-xs font-bold text-slate-500 mt-2">
-                <div className="flex items-center gap-2"><div className="w-3 h-3 bg-amber-500 rounded-full"></div> Wet / Raw ({selectedStation.inventory.wet} kg)</div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 bg-emerald-500 rounded-full"></div> Dry / Processed ({selectedStation.inventory.dry} kg)</div>
+                <div className="flex items-center gap-2"><div className="w-3 h-3 bg-amber-500 rounded-full"></div> Wet / Raw ({selectedStation.inventory?.wet || 0} kg)</div>
+                <div className="flex items-center gap-2"><div className="w-3 h-3 bg-emerald-500 rounded-full"></div> Dry / Processed ({selectedStation.inventory?.dry || 0} kg)</div>
               </div>
             </div>
           </div>
@@ -524,13 +786,17 @@ const BuyingStationView = ({ cropType, farmers, stations, forecasts, onLog, orde
         <div className="space-y-4 animate-fade-in">
           {stationOrders.length === 0 ? <div className="text-center py-20 text-slate-400 font-medium">No active orders.</div> : stationOrders.map(order => {
              // Calculate ATP for this specific order scenario
-             const availableStock = selectedStation.inventory[order.cropState === 'Wet' ? 'wet' : 'dry'];
+             const availableStock = selectedStation.inventory?.[order.cropState === 'Wet' ? 'wet' : 'dry'] || 0;
              const totalAvailable = availableStock + (order.cropState === 'Wet' ? incomingForecastTotal : 0);
              const isPending = order.status === 'Pending Review';
              const isCommitted = order.status === 'Committed' || order.status === 'Collecting';
+             
+             // Check if we can fill from stock
+             const remaining = (order.committed || 0) - (order.filled || 0);
+             const canFillFromStock = remaining > 0 && availableStock >= remaining;
 
              return (
-               <div key={order.id} className={`bg-white p-6 rounded-xl shadow-sm border ${isPending ? 'border-amber-300 ring-1 ring-amber-100' : 'border-slate-200'}`}>
+               <div key={order.originalId} className={`bg-white p-6 rounded-xl shadow-sm border ${isPending ? 'border-amber-300 ring-1 ring-amber-100' : 'border-slate-200'}`}>
                   <div className="flex justify-between items-start mb-4">
                      <div>
                         <div className="flex items-center gap-2">
@@ -570,6 +836,14 @@ const BuyingStationView = ({ cropType, farmers, stations, forecasts, onLog, orde
                                 <span>{Math.round((order.filled/order.committed)*100)}%</span>
                               </span>
                            </div>
+                           
+                           {/* FIX: Add Fill From Stock Button */}
+                           {canFillFromStock && order.status === 'Collecting' && (
+                              <button onClick={() => onFill(order.id)} className="px-3 rounded-lg font-bold text-xs bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-200 flex items-center gap-1 transition-colors">
+                                <Package size={14}/> Fill from Stock
+                              </button>
+                           )}
+
                            <button onClick={() => onDispatch(order.id)} disabled={order.filled < order.committed} className={`px-4 rounded-lg font-bold text-sm ${order.filled >= order.committed ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
                              Dispatch
                            </button>
@@ -609,7 +883,7 @@ const BuyingStationView = ({ cropType, farmers, stations, forecasts, onLog, orde
 
               <div className="flex gap-3 pt-2">
                 <button onClick={() => {setCommitModal(null); setCommitAmount('');}} className="flex-1 py-3 rounded-lg font-bold text-slate-500 hover:bg-slate-100">Cancel</button>
-                <button onClick={() => { onCommit(commitModal.id, commitAmount); setCommitModal(null); setCommitAmount(''); }} className="flex-1 py-3 rounded-lg font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg">Submit Proposal</button>
+                <button onClick={() => { onCommit(commitModal.id, commitAmount); setCommitModal(null); setCommitAmount(''); }} className="flex-1 py-3 rounded-lg font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg">Confirm Commit</button>
               </div>
             </div>
           </div>
@@ -633,7 +907,7 @@ const FarmerSimulator = ({ cropType, farmers, onForecast, orders }) => {
   return (
     <div className="flex flex-col lg:flex-row gap-8 justify-center items-start pt-4 pb-20 animate-fade-in">
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full lg:w-72 space-y-6">
-        <div><label className="text-xs font-bold text-slate-400 uppercase mb-3 block">Active Farmer</label><select className="w-full p-2.5 bg-slate-50 border rounded-lg" value={currentFarmer.id} onChange={(e) => setCurrentFarmer(farmers.find(f => f.id === parseInt(e.target.value)))}>{farmers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
+        <div><label className="text-xs font-bold text-slate-400 uppercase mb-3 block">Active Farmer</label><select className="w-full p-2.5 bg-slate-50 border rounded-lg" value={currentFarmer.id} onChange={(e) => setCurrentFarmer(farmers.find(f => f.id === e.target.value))}>{farmers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
         <div><label className="text-xs font-bold text-slate-400 uppercase mb-3 block">Mode</label><div className="space-y-2"><button onClick={() => setMode('app')} className={`w-full flex gap-3 px-4 py-3 rounded-lg text-sm font-bold ${mode === 'app' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-500' : 'bg-white border'}`}><Wifi size={16}/> App Mode</button><button onClick={() => setMode('chat')} className={`w-full flex gap-3 px-4 py-3 rounded-lg text-sm font-bold ${mode === 'chat' ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-500' : 'bg-white border'}`}><WifiOff size={16}/> SMS Mode</button></div></div>
       </div>
       <div className="relative mx-auto">
@@ -654,35 +928,32 @@ const AgentChatMode = ({ cropType, farmer, onSubmit, activeOrder }) => {
 
   // AI AGENT "WAKE UP" LOGIC
   useEffect(() => {
-    const generateIntro = async () => {
-      // 1. Call API
-      const res = await fetch('/api/ai-agent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          agentType: 'scout', 
-          context: {
-            farmerName: farmer.name,
-            weather: "Rainy on Friday", // Mocked live weather
-            lastHarvest: "2 weeks ago"
+    // Simulate AI Agent analyzing the situation
+    const fetchAiMessage = async () => {
+      try {
+        const res = await fetch('/api/ai-agent', { 
+           method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+           body: JSON.stringify({ agentType: 'scout', context: { farmerName: farmer.name, weather: "Rainy on Friday", lastHarvest: "2 weeks ago" } }) 
+        });
+        const data = await res.json();
+        setMessages([{ id: 1, sender: 'bot', text: data.message || `Kumusta ${farmer.name}!` }]);
+      } catch (e) { 
+          // Fallback if offline
+          let initialMsg = `Kumusta ${farmer.name}!`;
+          if (activeOrder) {
+            initialMsg = `Maayong buntag ${farmer.name}! 🌦️ Naay bagyo (Bad Weather) expected sa Friday. Also, dako ang demand sa Buying Station karon. Kung maka-harvest ka ugma, sure ang buyer. Pila kaya ang kaya nimo?`;
           }
-        })
-      });
-
-      const data = await res.json();
-      
-      // 2. Set Message
-      setMessages([{ id: 1, sender: 'bot', text: data.message }]);
-      
-      // ... Keep your existing options logic here
-      setOptions([
-        { label: "Yes (50kg)", val: 50 },
-        { label: "No (Dili pa)", val: 0 }
-      ]);
+          setMessages([{ id: 1, sender: 'bot', text: initialMsg }]);
+      }
     };
-
-    generateIntro();
-  }, [farmer]);
+    fetchAiMessage();
+    
+    setOptions([
+      { label: "Yes, maka-harvest ko (50kg)", val: 50 },
+      { label: "Yes, daghan ni (100kg)", val: 100 },
+      { label: "Dili pa ready (No)", val: 0 }
+    ]);
+  }, [farmer, activeOrder, cropType]);
 
   const handleReply = (opt) => {
     setMessages(prev => [...prev, { id: Date.now(), sender: 'user', text: opt.label }]);

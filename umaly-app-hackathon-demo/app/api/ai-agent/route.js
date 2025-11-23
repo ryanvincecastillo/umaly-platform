@@ -7,6 +7,22 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// NEW: Helper to get real weather
+async function getRealWeather(location) {
+  try {
+    if (!process.env.OPENWEATHER_API_KEY) return "Heavy Rain predicted for Friday (Simulated)";
+
+    const weatherRes = await fetch(
+      `https://api.openweathermap.org/data/2.5/weather?q=${location},PH&appid=${process.env.OPENWEATHER_API_KEY}&units=metric`
+    );
+    const weatherData = await weatherRes.json();
+    
+    return `${weatherData.weather[0].description}, Temp: ${weatherData.main.temp}°C`;
+  } catch (e) {
+    return "Data unavailable (Simulated Rain)";
+  }
+}
+
 export async function POST(req) {
   try {
     const { agentType, context } = await req.json();
@@ -20,23 +36,34 @@ export async function POST(req) {
       
       Rules:
       1. Calculate Days of Inventory (Stock / Burn Rate).
-      2. If Days < 7, status is CRITICAL. Recommend a specific PO amount.
-      3. If Days >= 7, status is HEALTHY. Provide a market trend insight.
+      2. If Days < 7, status is CRITICAL. Recommend a specific PO amount to cover 14 days of production.
+      3. If Days >= 7, status is HEALTHY. Return 0 for amount.
       
-      Output JSON format: { "status": "Critical" | "Healthy", "doi": number, "insight": "string", "recommendation": "string" }`;
+      IMPORTANT: Respond in strict JSON format.
+      Output JSON format: { 
+        "status": "Critical" | "Healthy", 
+        "doi": number, 
+        "insight": "string", 
+        "recommended_amount": number 
+      }`;
       
       userPrompt = `Current Stock: ${context.stock}kg. Daily Burn: ${context.burnRate}kg. Active Orders: ${context.pendingOrders}kg.`;
     }
 
     // --- AGENT 2: THE HARVEST SCOUT (Farmer Chat) ---
     else if (agentType === 'scout') {
-      systemPrompt = `You are 'Umaly', a friendly field coordinator speaking in Taglish/Bisaya.
-      Your goal: Convince the farmer to harvest early because of incoming demand or weather.
-      Keep it short (SMS style, max 160 chars).
+      const realWeather = await getRealWeather(context.location || "Davao City");
       
-      Context: Weather is ${context.weather}. Factory demand is high.`;
+      systemPrompt = `You are 'Umaly', a friendly field coordinator speaking in Taglish/Bisaya.
+      Your goal: Convince the farmer to harvest early.
+      
+      LIVE CONTEXT:
+      - Weather in ${context.location}: ${realWeather}
+      - Factory Demand: High
+      
+      Task: Draft a short SMS (max 160 chars). If the weather is bad, use it as a reason.`;
 
-      userPrompt = `Draft a message for Farmer ${context.farmerName}. Last harvest was ${context.lastHarvest}.`;
+      userPrompt = `Draft a message for Farmer ${context.farmerName}. Last harvest: ${context.lastHarvest}.`;
     }
 
     // --- AGENT 3: THE VARIANCE AUDITOR (Receiving) ---
@@ -47,6 +74,7 @@ export async function POST(req) {
       - Flag >5% variance as 'Suspicious'.
       - Flag positive variance (Received > Dispatched) as 'Scale Error'.
       
+      IMPORTANT: Respond in strict JSON format.
       Output JSON: { "verdict": "Pass" | "Investigate", "reason": "string" }`;
 
       userPrompt = `Dispatched: ${context.dispatched}kg. Received: ${context.received}kg. Crop: ${context.cropState}.`;
@@ -76,9 +104,8 @@ export async function POST(req) {
     console.error('AI Error:', error);
     // Fallback mock response so the app doesn't crash if OpenAI fails/has no credits
     return NextResponse.json({ 
-        message: "AI Service Unavailable (Check API Key)",
-        insight: "System offline. Using manual overrides.",
-        status: "Healthy"
-    }, { status: 200 }); // Return 200 even on error to keep UI alive
+        message: "AI Service Unavailable",
+        status: "Healthy" 
+    }, { status: 200 });
   }
 }
